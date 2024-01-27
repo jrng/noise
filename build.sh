@@ -2,6 +2,7 @@
 
 COMPILER="clang"
 COMPILER_FLAGS="-std=c99 -g"
+LINKER_FLAGS="-lm"
 
 compile () {
     echo "$1"
@@ -16,4 +17,4 @@ fi
 
 cd "${REL_PATH}/build"
 
-compile "${COMPILER} ${COMPILER_FLAGS} -o noise ../src/main.c"
+compile "${COMPILER} ${COMPILER_FLAGS} -o noise ../src/main.c ${LINKER_FLAGS}"
