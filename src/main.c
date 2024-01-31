@@ -21,7 +21,7 @@ typedef float f32;
 
 #define F32MAX FLT_MAX
 
-#define strcmp_literal(str, lit) strncmp((str), lit, sizeof(lit) - 1)
+#define strcmp_literal(str, lit) strncmp((str), lit, sizeof(lit))
 
 typedef struct
 {
@@ -95,6 +95,12 @@ typedef enum
     OUTPUT_FORMAT_TEXT  = 1,
     OUTPUT_FORMAT_PGM   = 2,
 } OutputFormat;
+
+typedef enum
+{
+    VALUE_FORMAT_DECIMAL        = 0,
+    VALUE_FORMAT_HEXADECIMAL    = 1,
+} ValueFormat;
 
 static void
 generate_dither_blue(Noise noise, RandomSeries *rnd)
@@ -429,6 +435,7 @@ s32 main(s32 argument_count, char **arguments)
     s32 width = 64;
     s32 height = 64;
     OutputFormat output_format = OUTPUT_FORMAT_RAW;
+    ValueFormat value_format = VALUE_FORMAT_DECIMAL;
     NoiseType noise_type = NOISE_TYPE_NONE;
 
     char *output_filename = 0;
@@ -436,6 +443,8 @@ s32 main(s32 argument_count, char **arguments)
     char *text_start = "";
     char *text_sep = ",";
     char *text_end = "\n";
+
+    s32 elements_per_line = 16;
 
     for (s32 i = 1; i < argument_count; i += 1)
     {
@@ -494,9 +503,16 @@ s32 main(s32 argument_count, char **arguments)
                 {
                     output_format = OUTPUT_FORMAT_RAW;
                 }
-                else if (!strcmp_literal(arguments[i], "text"))
+                else if (!strcmp_literal(arguments[i], "text") ||
+                         !strcmp_literal(arguments[i], "text.dec"))
                 {
                     output_format = OUTPUT_FORMAT_TEXT;
+                    value_format = VALUE_FORMAT_DECIMAL;
+                }
+                else if (!strcmp_literal(arguments[i], "text.hex"))
+                {
+                    output_format = OUTPUT_FORMAT_TEXT;
+                    value_format = VALUE_FORMAT_HEXADECIMAL;
                 }
                 else if (!strcmp_literal(arguments[i], "pgm"))
                 {
@@ -531,17 +547,32 @@ s32 main(s32 argument_count, char **arguments)
                 text_end = arguments[i];
             }
         }
+        else if (!strcmp_literal(argument, "--count"))
+        {
+            i += 1;
+
+            if (i < argument_count)
+            {
+                elements_per_line = (s32) strtol(arguments[i], NULL, 10);
+
+                if (elements_per_line <= 0)
+                {
+                    elements_per_line = 16;
+                }
+            }
+        }
         else if (!strcmp_literal(argument, "-h") || !strcmp_literal(argument, "--help"))
         {
             fprintf(stderr, "USAGE: noise [options]\n");
             fprintf(stderr, "\n");
             fprintf(stderr, "OPTIONS:\n");
             fprintf(stderr, "  -h, --help              List all available options.\n");
-            fprintf(stderr, "  -f <format>             Select the output format. Available: raw (default), text, pgm.\n");
+            fprintf(stderr, "  -f <format>             Select the output format. Available: raw (default), text(.dec), text.hex, pgm.\n");
             fprintf(stderr, "  -s <width>[x<height]    Set the size of the generated noise. If only width is given, the height will be equal to width.\n");
             fprintf(stderr, "  --start <text>          For text output format this is outputted before the noise signal.\n");
             fprintf(stderr, "  --end <text>            For text output format this is outputted after the noise signal.\n");
             fprintf(stderr, "  --sep <text>            For text output format this is outputted between noise values.\n");
+            fprintf(stderr, "  --count <num>           For text output format this is number of elements per line.\n");
             fprintf(stderr, "  -t <name>               Select a noise type to generate. A list of noise types is down below.\n");
             fprintf(stderr, "  -o <file>               Write the output to a file. By default the output is written to standard out.\n");
             fprintf(stderr, "\n");
@@ -551,7 +582,6 @@ s32 main(s32 argument_count, char **arguments)
 
             // -d <datatype>            float, byte
             // --seed <seed>
-            // --count <num>            elements per line
 
             return 0;
         }
@@ -600,14 +630,46 @@ s32 main(s32 argument_count, char **arguments)
 
         case OUTPUT_FORMAT_TEXT:
         {
-            fprintf(output_file, "%s%u", text_start, noise.data[0]);
-
-            for (s32 i = 1; i < noise_size; i += 1)
+            switch (value_format)
             {
-                fprintf(output_file, "%s%u", text_sep, noise.data[i]);
-            }
+                case VALUE_FORMAT_DECIMAL:
+                {
+                    fprintf(output_file, "%s%u", text_start, noise.data[0]);
 
-            fprintf(output_file, "%s", text_end);
+                    for (s32 i = 1; i < noise_size; i += 1)
+                    {
+                        if ((i % elements_per_line) == 0)
+                        {
+                            fprintf(output_file, "%s\n%u", text_sep, noise.data[i]);
+                        }
+                        else
+                        {
+                            fprintf(output_file, "%s%u", text_sep, noise.data[i]);
+                        }
+                    }
+
+                    fprintf(output_file, "%s", text_end);
+                } break;
+
+                case VALUE_FORMAT_HEXADECIMAL:
+                {
+                    fprintf(output_file, "%s0x%02X", text_start, noise.data[0]);
+
+                    for (s32 i = 1; i < noise_size; i += 1)
+                    {
+                        if ((i % elements_per_line) == 0)
+                        {
+                            fprintf(output_file, "%s\n0x%02X", text_sep, noise.data[i]);
+                        }
+                        else
+                        {
+                            fprintf(output_file, "%s0x%02X", text_sep, noise.data[i]);
+                        }
+                    }
+
+                    fprintf(output_file, "%s", text_end);
+                } break;
+            }
         } break;
 
         case OUTPUT_FORMAT_PGM:
