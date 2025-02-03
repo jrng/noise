@@ -75,6 +75,7 @@ typedef enum
 {
     NOISE_TYPE_NONE         = 0,
     NOISE_TYPE_DITHER_BLUE  = 1,
+    NOISE_TYPE_DITHER_BAYER = 2,
 } NoiseType;
 
 static Noise
@@ -133,7 +134,7 @@ generate_dither_blue(Noise noise, RandomSeries *rnd)
 
     for (;;)
     {
-        s32 cluster_x, cluster_y;
+        s32 cluster_x = 0, cluster_y = 0;
         f32 cluster_energy = 0.0f;
 
         for (s32 y = 0; y < noise.height; y += 1)
@@ -429,6 +430,50 @@ generate_dither_blue(Noise noise, RandomSeries *rnd)
     free(initial_binary_pattern);
 }
 
+static void
+generate_dither_bayer(Noise noise)
+{
+    u16 *values = (u16 *) malloc(4 * sizeof(u16));
+    u16 one_over = 4;
+
+    values[0] = 0; // ┏     ┓
+    values[1] = 2; // ┃ 0 2 ┃
+    values[2] = 3; // ┃ 3 1 ┃
+    values[3] = 1; // ┗     ┛
+
+    for (s32 size = 2; size < noise.width; size *= 2)
+    {
+        s32 new_size = 2 * size;
+        u16 *old_values = values;
+        values = (u16 *) malloc(new_size * new_size * sizeof(u16));
+        one_over *= 4;
+
+        for (s32 y = 0; y < size; y += 1)
+        {
+            for (s32 x = 0; x < size; x += 1)
+            {
+                u16 val = old_values[y * size + x];
+
+                values[ y         * new_size +  x        ] = 4 * val;
+                values[ y         * new_size + (x + size)] = 4 * val + 2;
+                values[(y + size) * new_size +  x        ] = 4 * val + 3;
+                values[(y + size) * new_size + (x + size)] = 4 * val + 1;
+            }
+        }
+
+        free(old_values);
+    }
+
+    s32 count = noise.width * noise.height;
+
+    for (s32 i = 0; i < count; i += 1)
+    {
+        noise.data[i] = (values[i] * 256) / one_over;
+    }
+
+    free(values);
+}
+
 s32 main(s32 argument_count, char **arguments)
 {
     u32 seed = 0;
@@ -459,6 +504,10 @@ s32 main(s32 argument_count, char **arguments)
                 if (!strcmp_literal(arguments[i], "dither-blue"))
                 {
                     noise_type = NOISE_TYPE_DITHER_BLUE;
+                }
+                else if (!strcmp_literal(arguments[i], "dither-bayer"))
+                {
+                    noise_type = NOISE_TYPE_DITHER_BAYER;
                 }
             }
         }
@@ -578,6 +627,7 @@ s32 main(s32 argument_count, char **arguments)
             fprintf(stderr, "\n");
             fprintf(stderr, "NOISE TYPES:\n");
             fprintf(stderr, "  dither-blue             Dither blue noise pattern\n");
+            fprintf(stderr, "  dither-bayer            Dither bayer pattern\n");
             fprintf(stderr, "\n");
 
             // -d <datatype>            float, byte
@@ -585,6 +635,12 @@ s32 main(s32 argument_count, char **arguments)
 
             return 0;
         }
+    }
+
+    if ((width <= 0) || (height <= 0))
+    {
+        fprintf(stderr, "error: width (= %d) and height (= %d) need to be greater than 0\n", width, height);
+        return 1;
     }
 
     if (noise_type == NOISE_TYPE_NONE)
@@ -603,6 +659,29 @@ s32 main(s32 argument_count, char **arguments)
         case NOISE_TYPE_DITHER_BLUE:
         {
             generate_dither_blue(noise, &rnd);
+        } break;
+
+        case NOISE_TYPE_DITHER_BAYER:
+        {
+            if (noise.width != noise.height)
+            {
+                fprintf(stderr, "error: dither-bayer only supports square size that are powers of two\n");
+                return 1;
+            }
+
+            if (noise.width <= 1)
+            {
+                fprintf(stderr, "error: dither-bayer only supports sizes that are greater than 1\n");
+                return 1;
+            }
+
+            if (noise.width & (noise.width - 1))
+            {
+                fprintf(stderr, "error: dither-bayer only supports sizes that are power of two\n");
+                return 1;
+            }
+
+            generate_dither_bayer(noise);
         } break;
     }
 
