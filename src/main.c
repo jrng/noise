@@ -422,7 +422,7 @@ generate_dither_blue(Noise noise, RandomSeries *rnd)
 
     for (s32 i = 0; i < noise_size; i += 1)
     {
-        noise.data[i] = (dither_array[i] * 256) / noise_size;
+        noise.data[i] = (dither_array[i] * 255) / noise_size;
     }
 
     free(dither_array);
@@ -468,7 +468,7 @@ generate_dither_bayer(Noise noise)
 
     for (s32 i = 0; i < count; i += 1)
     {
-        noise.data[i] = (values[i] * 256) / one_over;
+        noise.data[i] = (values[i] * 255) / one_over;
     }
 
     free(values);
